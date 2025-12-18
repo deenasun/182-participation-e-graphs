@@ -1,0 +1,196 @@
+"""
+Data ingestion pipeline for EECS 182 Post Graph.
+Processes EdStem posts, extracts metadata, generates embeddings, and builds graph layouts.
+"""
+
+from .pdf_processor import extract_pdf_text, process_attachments
+from .embedder import PostEmbedder
+from .categorizer import PostCategorizer
+from .graph_builder import GraphBuilder
+
+__all__ = [
+    'extract_pdf_text',
+    'process_attachments',
+    'PostEmbedder',
+    'PostCategorizer',
+    'GraphBuilder',
+    'run_ingestion_pipeline'
+]
+
+def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
+    """
+    Main ingestion pipeline - load JSON, process, generate embeddings, compute layouts.
+    
+    Args:
+        json_path: Path to ed_posts.json file. If None, uses default location (project root).
+        output_path: Path to save processed_posts.json. If None, uses backend directory.
+    """
+    import json
+    import os
+    import numpy as np
+    from pathlib import Path
+    
+    # Default paths
+    if json_path is None:
+        json_path = Path(__file__).parent.parent.parent / 'ed_posts.json'
+    
+    if output_path is None:
+        output_path = Path(__file__).parent.parent / 'processed_posts.json'
+    
+    print("=" * 60)
+    print("EECS 182 Post Graph - Data Ingestion Pipeline")
+    print("=" * 60)
+    
+    print("\nStep 1: Loading posts from JSON...")
+    with open(json_path, 'r') as f:
+        raw_posts = json.load(f)
+    print(f"Found {len(raw_posts)} posts")
+    
+    # Initialize components
+    embedder = PostEmbedder()
+    categorizer = PostCategorizer()
+    graph_builder = GraphBuilder()
+    
+    print("\nStep 2: Processing posts...")
+    processed_posts = []
+    for raw_post in raw_posts:
+        # Skip the header post
+        if 'Extra Credit Opportunity' in raw_post.get('title', ''):
+            continue
+            
+        # Extract basic metadata
+        post_data = {
+            'ed_post_id': raw_post['id'],
+            'title': raw_post['title'],
+            'content': raw_post['content'],
+            'author': raw_post['author'],
+            'date': raw_post['date'],
+            'attachment_urls': [att['url'] for att in raw_post.get('attachments_downloaded', [])],
+            'attachment_summaries': '',
+            'github_url': None,
+            'website_url': None,
+            'linkedin_url': None,
+            'num_reactions': 0,
+            'num_replies': 0
+        }
+        
+        # Extract URLs from content using basic regex
+        import re
+        content = raw_post['content']
+        github = re.search(r'github\.com/[\w-]+(?:/[\w-]+)?', content)
+        # Look for website URLs (excluding github, linkedin, edstem)
+        website = re.search(r'https?://(?!github\.com|linkedin\.com|edstem\.org)[\w.-]+\.[\w]+(?:/[\w.-]*)*', content)
+        linkedin = re.search(r'linkedin\.com/in/[\w-]+', content)
+        
+        post_data['github_url'] = github.group(0) if github else None
+        post_data['website_url'] = website.group(0) if website else None
+        post_data['linkedin_url'] = linkedin.group(0) if linkedin else None
+        
+        # Process attachments (for now, just note we have them)
+        if post_data['attachment_urls']:
+            post_data['attachment_summaries'] = f"Attachments: {', '.join([att.get('original_filename', 'file') for att in raw_post.get('attachments_downloaded', [])])}"
+        
+        processed_posts.append(post_data)
+    
+    print(f"Processed {len(processed_posts)} posts (excluding header)")
+    
+    print("\nStep 3: Training topic model with BERTopic...")
+    all_content = [p['content'] for p in processed_posts]
+    categorizer.train_topic_model(all_content)
+    
+    print("\nStep 4: Categorizing posts (extracting topics, tools, LLMs)...")
+    for i, post in enumerate(processed_posts):
+        post['topics'] = categorizer.extract_topics(post['content'], i)
+        post['tools'] = categorizer.extract_tools(post['content'])
+        post['llms'] = categorizer.extract_llms(post['content'])
+        post['impressiveness_score'] = categorizer.calculate_impressiveness(post)
+    
+    print("\nStep 5: Generating embeddings...")
+    for i, post in enumerate(processed_posts):
+        if (i + 1) % 20 == 0:
+            print(f"  Generated embeddings for {i + 1}/{len(processed_posts)} posts")
+        embeddings = embedder.embed_post(post)
+        post.update(embeddings)
+    print(f"  Generated embeddings for {len(processed_posts)}/{len(processed_posts)} posts")
+    
+    print("\nStep 6: Computing graph layouts...")
+    layout_data = {}
+    
+    for view_mode in ['topic', 'tool', 'llm']:
+        print(f"  Computing {view_mode} view...")
+        
+        # Get view-specific embeddings
+        emb_key = f'{view_mode}_view_embedding'
+        embeddings = np.array([p[emb_key] for p in processed_posts])
+        
+        # Compute layout
+        positions, clusters = graph_builder.compute_layout(embeddings, view_mode)
+        
+        # Store layout
+        for i, post in enumerate(processed_posts):
+            post[f'{view_mode}_layout'] = {
+                'x': float(positions[i][0]),
+                'y': float(positions[i][1]),
+                'cluster_id': int(clusters[i])
+            }
+        
+        # Compute similarities
+        similarities = graph_builder.compute_similarities(embeddings)
+        layout_data[f'{view_mode}_similarities'] = similarities
+        
+        print(f"    Found {len(similarities)} edges above similarity threshold")
+    
+    print("\nStep 7: Saving processed data...")
+    # output_path is now passed as parameter or set to backend/processed_posts.json
+    
+    # Convert numpy arrays and int64 to native Python types for JSON serialization
+    for post in processed_posts:
+        for key in ['content_embedding', 'topic_view_embedding', 'tool_view_embedding', 'llm_view_embedding']:
+            if key in post:
+                post[key] = post[key].tolist()
+        
+        # Convert numpy int64 to int in layouts
+        for view_mode in ['topic', 'tool', 'llm']:
+            layout_key = f'{view_mode}_layout'
+            if layout_key in post:
+                post[layout_key]['cluster_id'] = int(post[layout_key]['cluster_id'])
+    
+    # Convert similarities to serializable format
+    for key in layout_data:
+        if key.endswith('_similarities'):
+            layout_data[key] = [(int(i), int(j), float(sim)) for i, j, sim in layout_data[key]]
+    
+    with open(output_path, 'w') as f:
+        json.dump({
+            'posts': processed_posts,
+            'layout_data': layout_data
+        }, f, indent=2)
+    
+    print(f"Saved processed data to: {output_path}")
+    
+    # Print summary statistics
+    print("\n" + "=" * 60)
+    print("INGESTION COMPLETE - Summary Statistics")
+    print("=" * 60)
+    print(f"Total posts processed: {len(processed_posts)}")
+    print(f"Average impressiveness score: {np.mean([p['impressiveness_score'] for p in processed_posts]):.2f}")
+    
+    # Count categories
+    all_tools = [tool for post in processed_posts for tool in post['tools']]
+    all_llms = [llm for post in processed_posts for llm in post['llms']]
+    
+    from collections import Counter
+    tool_counts = Counter(all_tools)
+    llm_counts = Counter(all_llms)
+    
+    print(f"\nTool distribution:")
+    for tool, count in tool_counts.most_common(5):
+        print(f"  {tool}: {count}")
+    
+    print(f"\nLLM distribution:")
+    for llm, count in llm_counts.most_common():
+        print(f"  {llm}: {count}")
+    
+    print("\n" + "=" * 60)
+    
+    return processed_posts
