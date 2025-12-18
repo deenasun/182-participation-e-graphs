@@ -136,7 +136,7 @@ function AppContent() {
       <footer className="bg-white border-t border-gray-200 py-2 px-6">
         <div className="flex justify-between items-center text-xs text-gray-500">
           <div>
-            EECS 182 - Berkeley • Phase 4 Implementation
+            EECS 182 - Berkeley
           </div>
           <div>
             {graphData?.nodes?.length || 0} Posts • {graphData?.edges?.length || 0} Connections

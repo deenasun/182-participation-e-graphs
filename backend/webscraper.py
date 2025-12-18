@@ -4,8 +4,8 @@ import time
 import os
 import re
 
-COURSE_ID = 84647
-API_TOKEN = os.environ.get("ED_API_KEY")
+ED_COURSE_ID = os.environ.get("ED_COURSE_ID")
+ED_API_TOKEN = os.environ.get("ED_API_TOKEN")
 SEARCH_STRING = "Special Participation E"        
 OUTPUT_FILE = "ed_posts.json"
 ATTACHMENT_DIR = "attachments"   
@@ -13,7 +13,7 @@ ATTACHMENT_DIR = "attachments"
 BASE_URL = "https://us.edstem.org/api"
 
 headers = {
-    "Authorization": f"Bearer {API_TOKEN}",
+    "Authorization": f"Bearer {ED_API_TOKEN}",
     "Content-Type": "application/json"
 }
 
@@ -99,7 +99,7 @@ def process_threads(substring):
     substring_lower = substring.lower()
     
     count = 0
-    for thread in get_threads(COURSE_ID):
+    for thread in get_threads(ED_COURSE_ID):
         title = thread.get('title', '') or ''
         # Some threads have content directly, others might need a fetch. 
         # Usually list endpoint has content snippets or full XML.
@@ -133,7 +133,7 @@ def process_threads(substring):
                 'date': thread.get('created_at'),
                 'content': body,
                 'attachments_downloaded': downloaded_files,
-                'url': f"https://edstem.org/us/courses/{COURSE_ID}/discussion/{thread.get('id')}"
+                'url': f"https://edstem.org/us/courses/{ED_COURSE_ID}/discussion/{thread.get('id')}"
             }
             
             results.append(post_data)
@@ -143,8 +143,8 @@ def process_threads(substring):
     return results
 
 if __name__ == "__main__":
-    if API_TOKEN == "YOUR_TOKEN_HERE":
-        print("Please update the API_TOKEN and COURSE_ID in the script.")
+    if ED_API_TOKEN == "YOUR_TOKEN_HERE":
+        print("Please update the ED_API_TOKEN and ED_COURSE_ID in the script.")
     else:
         matched_posts = process_threads(SEARCH_STRING)
         
