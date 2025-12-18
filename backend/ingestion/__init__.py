@@ -22,7 +22,7 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
     Main ingestion pipeline - load JSON, process, generate embeddings, compute layouts.
     
     Args:
-        json_path: Path to ed_posts.json file. If None, uses default location (project root).
+        json_path: Path to ed_posts.json file. If None, uses default location in the backend directory.
         output_path: Path to save processed_posts.json. If None, uses backend directory.
     """
     import json
@@ -32,7 +32,8 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
     
     # Default paths
     if json_path is None:
-        json_path = Path(__file__).parent.parent.parent / 'ed_posts.json'
+        # Expect ed_posts.json to live in the backend directory
+        json_path = Path(__file__).parent.parent / 'ed_posts.json'
     
     if output_path is None:
         output_path = Path(__file__).parent.parent / 'processed_posts.json'
