@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: eecs182-api
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: ED_API_TOKEN
+        sync: false
+      - key: ED_COURSE_ID
+        sync: false
+    
+databases:
+  - name: eecs182-db
+    databaseName: postgres
+    user: postgres
