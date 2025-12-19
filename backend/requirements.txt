@@ -6,7 +6,7 @@ sentence-transformers>=3.3.0
 bertopic>=0.16.4
 umap-learn>=0.5.8
 hdbscan>=0.8.38
-numpy==1.26.0
+numpy>=1.26.0
 pandas>=2.2.0
 pypdf2>=3.0.1
 requests>=2.32.0
