@@ -35,6 +35,7 @@ export interface GraphEdge {
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  cluster_names?: Record<number, string>;
 }
 
 export type ViewMode = 'topic' | 'tool' | 'llm';

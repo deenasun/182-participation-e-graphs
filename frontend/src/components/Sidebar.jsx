@@ -3,6 +3,16 @@ import React from 'react';
 const Sidebar = ({ post, onClose }) => {
   if (!post) return null;
 
+  // Helper to strip XML/HTML tags from EdStem content
+  const cleanContent = (content) => {
+    if (!content) return "";
+    // Replace tags with space, then clean up extra whitespace
+    return content
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   return (
     <>
       {/* Overlay */}
@@ -70,7 +80,7 @@ const Sidebar = ({ post, onClose }) => {
           <div className="mb-6">
             <h3 className="font-semibold mb-2 text-gray-700">Content</h3>
             <div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
-              {post.content}
+              {cleanContent(post.content)}
             </div>
           </div>
           
