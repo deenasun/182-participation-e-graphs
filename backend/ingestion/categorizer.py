@@ -6,6 +6,7 @@ Extracts topics, tool types, and LLMs used from post content.
 from bertopic import BERTopic
 import re
 from typing import List, Dict
+from sklearn.feature_extraction.text import CountVectorizer
 
 class PostCategorizer:
     """Extract categories and compute quality scores for posts."""
@@ -15,6 +16,22 @@ class PostCategorizer:
         self.bertopic = None
         self.topics = None
         self.probs = None
+        
+        # Stop words to filter out from topic generation
+        self.stop_words = [
+            'to', 'and', 'the', 'a', 'an', 'is', 'of', 'in', 'for', 'on', 
+            'with', 'as', 'by', 'at', 'it', 'from', 'be', 'was', 'are', 
+            'that', 'this', 'but', 'not', 'or', 'if', 'so', 'up', 'out',
+            'what', 'how', 'why', 'when', 'where', 'which', 'who', 'whom',
+            'this', 'that', 'these', 'those', 'am', 'is', 'are', 'was', 'were',
+            'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does',
+            'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because',
+            'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about',
+            'against', 'between', 'into', 'through', 'during', 'before', 'after',
+            'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off',
+            'over', 'under', 'again', 'further', 'then', 'once', "my", "et", "al", "me", "you", 
+            "ai", "gemini", "claude", "gpt", "openai", "perplexity", "cursor"
+        ]
         
         # Tool type keywords
         self.tool_keywords = {
@@ -26,7 +43,8 @@ class PostCategorizer:
             'chat': ['chat', 'conversation', 'dialogue', 'tutor', 'chatbot'],
             'summary': ['summary', 'summarize', 'notes', 'outline'],
             'video': ['video', 'recording', 'screencast'],
-            'tutorial': ['tutorial', 'guide', 'walkthrough', 'explanation']
+            'tutorial': ['tutorial', 'guide', 'walkthrough', 'explanation'],
+            "lecture": ["lecture"],
         }
         
         # LLM keywords
@@ -56,12 +74,16 @@ class PostCategorizer:
             clean = re.sub(r'\s+', ' ', clean).strip()
             cleaned_docs.append(clean)
         
+        # Use CountVectorizer with stop words to filter out common words
+        vectorizer_model = CountVectorizer(stop_words=self.stop_words)
+        
         self.bertopic = BERTopic(
             language="english",
             calculate_probabilities=True,
             verbose=False,
             min_topic_size=3,
-            nr_topics='auto'
+            nr_topics='auto',
+            vectorizer_model=vectorizer_model
         )
         
         try:

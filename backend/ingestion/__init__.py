@@ -59,11 +59,22 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
         if 'Extra Credit Opportunity' in raw_post.get('title', ''):
             continue
             
+        # Clean content and title from XML/HTML tags
+        import re
+        content = raw_post.get('content', '')
+        # Remove XML tags and normalize whitespace
+        content = re.sub(r'<[^>]+>', ' ', content)
+        content = re.sub(r'\s+', ' ', content).strip()
+        
+        title = raw_post.get('title', '')
+        title = re.sub(r'<[^>]+>', ' ', title)
+        title = re.sub(r'\s+', ' ', title).strip()
+            
         # Extract basic metadata
         post_data = {
             'ed_post_id': raw_post['id'],
-            'title': raw_post['title'],
-            'content': raw_post['content'],
+            'title': title,
+            'content': content,
             'author': raw_post['author'],
             'date': raw_post['date'],
             'attachment_urls': [att['url'] for att in raw_post.get('attachments_downloaded', [])],
@@ -116,6 +127,7 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
     
     print("\nStep 6: Computing graph layouts...")
     layout_data = {}
+    cluster_names_data = {}
     
     for view_mode in ['topic', 'tool', 'llm']:
         print(f"  Computing {view_mode} view...")
@@ -134,6 +146,35 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
                 'y': float(positions[i][1]),
                 'cluster_id': int(clusters[i])
             }
+        
+        # Compute cluster names by finding most common labels in each cluster
+        cluster_names = {}
+        unique_clusters = set(clusters)
+        from collections import Counter
+        
+        for cid in unique_clusters:
+            cid_int = int(cid)
+            if cid_int == -1:
+                cluster_names[cid_int] = "Uncategorized"
+                continue
+                
+            # Get all labels for posts in this cluster
+            cluster_posts = [processed_posts[i] for i, cluster_val in enumerate(clusters) if cluster_val == cid]
+            
+            if view_mode == 'topic':
+                labels = [label for p in cluster_posts for label in p.get('topics', [])]
+            elif view_mode == 'tool':
+                labels = [label for p in cluster_posts for label in p.get('tools', []) if label != 'other']
+            else: # llm
+                labels = [label for p in cluster_posts for label in p.get('llms', []) if label != 'Other']
+            
+            if labels:
+                most_common = Counter(labels).most_common(1)[0][0]
+                cluster_names[cid_int] = most_common
+            else:
+                cluster_names[cid_int] = f"Cluster {cid_int}"
+        
+        cluster_names_data[view_mode] = cluster_names
         
         # Compute similarities
         similarities = graph_builder.compute_similarities(embeddings)
@@ -164,7 +205,8 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
     with open(output_path, 'w') as f:
         json.dump({
             'posts': processed_posts,
-            'layout_data': layout_data
+            'layout_data': layout_data,
+            'cluster_names': cluster_names_data
         }, f, indent=2)
     
     print(f"Saved processed data to: {output_path}")

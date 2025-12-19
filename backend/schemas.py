@@ -3,7 +3,7 @@ Pydantic models for API request/response validation
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 
 
@@ -59,6 +59,7 @@ class GraphData(BaseModel):
     """Complete graph data for visualization"""
     nodes: List[GraphNode]
     edges: List[GraphEdge]
+    cluster_names: Optional[Dict[int, str]] = None
 
 
 class SearchRequest(BaseModel):

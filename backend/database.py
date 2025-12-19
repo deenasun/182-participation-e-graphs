@@ -158,7 +158,7 @@ class SupabaseClient:
             view_mode: View mode ('topic', 'tool', or 'llm')
             
         Returns:
-            Dictionary with 'nodes' and 'edges' keys
+            Dictionary with 'nodes', 'edges', and 'cluster_names' keys
         """
         # Get all posts
         posts = self.client.table('posts').select('*').execute()
@@ -173,20 +173,50 @@ class SupabaseClient:
         
         # Combine posts with their layouts
         nodes = []
+        cluster_posts = {} # Group posts by cluster for naming
+        
         for post in posts.data:
             layout = layout_map.get(post['id'])
             if layout:
+                cid = layout['cluster_id']
                 node = {
                     **post,
                     'x': layout['x'],
                     'y': layout['y'],
-                    'cluster_id': layout['cluster_id']
+                    'cluster_id': cid
                 }
+                # Group for cluster naming
+                if cid not in cluster_posts:
+                    cluster_posts[cid] = []
+                cluster_posts[cid].append(post)
+                
                 # Remove embeddings from node data to reduce payload size
                 for key in ['content_embedding', 'topic_view_embedding', 
                            'tool_view_embedding', 'llm_view_embedding']:
                     node.pop(key, None)
                 nodes.append(node)
+        
+        # Compute cluster names if not already provided (fallback)
+        cluster_names = {}
+        from collections import Counter
+        
+        for cid, posts_in_cluster in cluster_posts.items():
+            if cid == -1:
+                cluster_names[cid] = "Uncategorized"
+                continue
+                
+            if view_mode == 'topic':
+                labels = [label for p in posts_in_cluster for label in p.get('topics', [])]
+            elif view_mode == 'tool':
+                labels = [label for p in posts_in_cluster for label in p.get('tools', []) if label != 'other']
+            else: # llm
+                labels = [label for p in posts_in_cluster for label in p.get('llms', []) if label != 'Other']
+            
+            if labels:
+                most_common = Counter(labels).most_common(1)[0][0]
+                cluster_names[cid] = most_common
+            else:
+                cluster_names[cid] = f"Cluster {cid}"
         
         # Get edges for this view
         edges_result = self.client.table('post_similarities').select('*').eq(
@@ -204,7 +234,8 @@ class SupabaseClient:
         
         return {
             'nodes': nodes,
-            'edges': edges
+            'edges': edges,
+            'cluster_names': cluster_names
         }
     
     def search_posts(
