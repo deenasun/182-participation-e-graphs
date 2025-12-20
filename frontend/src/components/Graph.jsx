@@ -3,6 +3,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 
 const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
   const graphRef = useRef();
+  const zoomLevelRef = useRef(1); // Track current zoom level
   const [dimensions, setDimensions] = useState({ width: 1200, height: 800 });
   const [hoveredNode, setHoveredNode] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -103,26 +104,34 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
     if (graphRef.current && data && data.nodes.length > 0) {
       setTimeout(() => {
         graphRef.current.zoomToFit(400, 50);
+        // Reset zoom level tracking after zoomToFit
+        zoomLevelRef.current = 1;
       }, 100);
     }
   }, [data, viewMode]);
 
-  // Zoom controls
+  // Zoom controls - apply relative zoom changes
   const handleZoomIn = useCallback(() => {
     if (graphRef.current) {
-      graphRef.current.zoom(1.2, 200);
+      // Apply relative zoom: multiply current zoom by 1.2
+      zoomLevelRef.current *= 1.2;
+      graphRef.current.zoom(zoomLevelRef.current, 200);
     }
   }, []);
 
   const handleZoomOut = useCallback(() => {
     if (graphRef.current) {
-      graphRef.current.zoom(0.8, 200);
+      // Apply relative zoom: multiply current zoom by 0.8
+      zoomLevelRef.current *= 0.8;
+      graphRef.current.zoom(zoomLevelRef.current, 200);
     }
   }, []);
 
   const handleZoomToFit = useCallback(() => {
     if (graphRef.current) {
       graphRef.current.zoomToFit(400, 50);
+      // Reset zoom level tracking after zoomToFit
+      zoomLevelRef.current = 1;
     }
   }, []);
 
