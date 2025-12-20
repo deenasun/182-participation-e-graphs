@@ -5,10 +5,10 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
   const graphRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 1200, height: 800 });
   const [hoveredNode, setHoveredNode] = useState(null);
-  const [selectedCluster, setSelectedCluster] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
 
-  // Nice palette for clusters
-  const clusterColors = [
+  // Nice palette for categories
+  const categoryColors = [
     '#4ECDC4', // Teal
     '#45B7D1', // Blue
     '#96CEB4', // Green
@@ -21,7 +21,39 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
     '#00B894', // Mint
     '#0984E3', // Bright Blue
     '#D63031', // Red
+    '#E17055', // Coral
+    '#74B9FF', // Sky Blue
+    '#55EFC4', // Turquoise
+    '#FDCB6E', // Gold
+    '#A29BFE', // Lavender
+    '#FD79A8', // Rose
   ];
+
+  // Create a mapping from category name to color
+  const categoryColorMap = useMemo(() => {
+    if (!data || !data.nodes) return new Map();
+    
+    // Get all unique categories for current view mode
+    const categories = new Set();
+    data.nodes.forEach(node => {
+      if (viewMode === 'topic' && node.topics) {
+        node.topics.forEach(topic => categories.add(topic));
+      } else if (viewMode === 'tool' && node.tools) {
+        node.tools.forEach(tool => categories.add(tool));
+      } else if (viewMode === 'llm' && node.llms) {
+        node.llms.forEach(llm => categories.add(llm));
+      }
+    });
+    
+    // Create color mapping
+    const sortedCategories = Array.from(categories).sort();
+    const colorMap = new Map();
+    sortedCategories.forEach((category, index) => {
+      colorMap.set(category, categoryColors[index % categoryColors.length]);
+    });
+    
+    return colorMap;
+  }, [data, viewMode, categoryColors]);
 
   // Update dimensions on window resize
   useEffect(() => {
@@ -39,22 +71,37 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
-  // Filter data based on selected cluster
+  // Filter data based on selected category
+  // When a category is selected, show all nodes that have that category in their topics/tools/llms
   const filteredData = useMemo(() => {
-    if (selectedCluster === null) return data;
+    if (selectedCategory === null) return data;
     
-    const nodes = data.nodes.filter(node => node.cluster_id === selectedCluster);
+    // Filter nodes based on whether they contain the selected category in their relevant array
+    let nodes;
+    if (viewMode === 'topic') {
+      nodes = data.nodes.filter(node => 
+        node.topics && node.topics.includes(selectedCategory)
+      );
+    } else if (viewMode === 'tool') {
+      nodes = data.nodes.filter(node => 
+        node.tools && node.tools.includes(selectedCategory)
+      );
+    } else { // llm
+      nodes = data.nodes.filter(node => 
+        node.llms && node.llms.includes(selectedCategory)
+      );
+    }
+    
     const nodeIds = new Set(nodes.map(n => n.id));
-    // When filtering by cluster, we might want to still show edges? 
-    // Usually edges within the cluster are most relevant.
+    // When filtering by category, show edges between filtered nodes
     const edges = data.edges.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target));
     
     return { ...data, nodes, edges };
-  }, [data, selectedCluster]);
+  }, [data, selectedCategory, viewMode]);
 
   // Reset filter when view mode changes
   useEffect(() => {
-    setSelectedCluster(null);
+    setSelectedCategory(null);
   }, [viewMode]);
 
   // Fit graph to view on data change
@@ -67,7 +114,7 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
     }
   }, [filteredData, viewMode]);
 
-  // Get color for node based on cluster and highlight state
+  // Get color for node based on its primary category and highlight state
   const getNodeColor = useCallback((node) => {
     if (highlightedNodes && highlightedNodes.has(node.id)) {
       return '#FF6B6B'; // Red for highlighted/search results
@@ -76,11 +123,23 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
       return '#FFA500'; // Orange for hover
     }
     
-    const clusterId = node.cluster_id !== undefined ? node.cluster_id : 0;
-    if (clusterId === -1) return '#DFE6E9'; // Light gray for noise
+    // Get the primary category for this node based on view mode
+    let primaryCategory = null;
+    if (viewMode === 'topic' && node.topics && node.topics.length > 0) {
+      primaryCategory = node.topics[0];
+    } else if (viewMode === 'tool' && node.tools && node.tools.length > 0) {
+      primaryCategory = node.tools[0];
+    } else if (viewMode === 'llm' && node.llms && node.llms.length > 0) {
+      primaryCategory = node.llms[0];
+    }
     
-    return clusterColors[Math.abs(clusterId) % clusterColors.length];
-  }, [highlightedNodes, hoveredNode, clusterColors]);
+    // Return color for the category, or default gray if no category
+    if (primaryCategory && categoryColorMap.has(primaryCategory)) {
+      return categoryColorMap.get(primaryCategory);
+    }
+    
+    return '#DFE6E9'; // Light gray for uncategorized
+  }, [highlightedNodes, hoveredNode, viewMode, categoryColorMap]);
 
   // Get node size based on highlight state and impressiveness
   const getNodeSize = useCallback((node) => {
@@ -181,13 +240,27 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
 
   const graphData = prepareGraphData();
 
-  const clusters = useMemo(() => {
-    if (!data || !data.cluster_names) return [];
-    return Object.entries(data.cluster_names).map(([id, name]) => ({
-      id: parseInt(id),
-      name
-    })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [data]);
+  // Extract unique categories from nodes based on view mode
+  const categories = useMemo(() => {
+    if (!data || !data.nodes) return [];
+    
+    const categorySet = new Set();
+    data.nodes.forEach(node => {
+      if (viewMode === 'topic' && node.topics) {
+        node.topics.forEach(topic => categorySet.add(topic));
+      } else if (viewMode === 'tool' && node.tools) {
+        node.tools.forEach(tool => categorySet.add(tool));
+      } else if (viewMode === 'llm' && node.llms) {
+        node.llms.forEach(llm => categorySet.add(llm));
+      }
+    });
+    
+    // Convert to array and sort
+    return Array.from(categorySet).sort().map(category => ({
+      name: category,
+      color: categoryColorMap.get(category) || '#DFE6E9'
+    }));
+  }, [data, viewMode, categoryColorMap]);
 
   if (!data || !data.nodes || data.nodes.length === 0) {
     return (
@@ -228,10 +301,10 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
       {/* Legend & Filter */}
       <div className="absolute bottom-4 left-4 bg-white p-4 rounded-lg shadow-lg text-sm max-h-[70vh] overflow-y-auto w-64 border border-gray-200">
         <div className="flex justify-between items-center mb-3">
-          <h4 className="font-bold text-gray-800">Clusters ({viewMode})</h4>
-          {selectedCluster !== null && (
+          <h4 className="font-bold text-gray-800 capitalize">Categories ({viewMode})</h4>
+          {selectedCategory !== null && (
             <button 
-              onClick={() => setSelectedCluster(null)}
+              onClick={() => setSelectedCategory(null)}
               className="text-xs text-blue-600 hover:text-blue-800 font-medium"
             >
               Reset
@@ -240,18 +313,18 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
         </div>
         
         <div className="space-y-2">
-          {clusters.map((cluster) => (
+          {categories.map((category) => (
             <div 
-              key={cluster.id} 
-              className={`flex items-center gap-2 cursor-pointer p-1 rounded transition-colors ${selectedCluster === cluster.id ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50'}`}
-              onClick={() => setSelectedCluster(selectedCluster === cluster.id ? null : cluster.id)}
+              key={category.name} 
+              className={`flex items-center gap-2 cursor-pointer p-1 rounded transition-colors ${selectedCategory === category.name ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50'}`}
+              onClick={() => setSelectedCategory(selectedCategory === category.name ? null : category.name)}
             >
               <div 
                 className="w-3 h-3 rounded-full flex-shrink-0" 
-                style={{ backgroundColor: cluster.id === -1 ? '#DFE6E9' : clusterColors[Math.abs(cluster.id) % clusterColors.length] }}
+                style={{ backgroundColor: category.color }}
               ></div>
-              <span className={`truncate ${selectedCluster === cluster.id ? 'font-semibold text-blue-800' : 'text-gray-700'}`}>
-                {cluster.name}
+              <span className={`truncate ${selectedCategory === category.name ? 'font-semibold text-blue-800' : 'text-gray-700'}`}>
+                {category.name}
               </span>
             </div>
           ))}
@@ -262,7 +335,7 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
             <div className="w-2 h-2 rounded-full bg-[#FF6B6B]"></div>
             <span>Search Results / Highlights</span>
           </div>
-          <p>• Click cluster to filter</p>
+          <p>• Click category to filter</p>
           <p>• Click node for details</p>
         </div>
       </div>
@@ -272,7 +345,7 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
         <div className="font-bold text-gray-800 mb-1 capitalize">{viewMode} View</div>
         <div className="text-gray-600 font-medium">
           {filteredData.nodes.length} posts
-          {selectedCluster !== null && <span className="text-blue-600 ml-1">(filtered)</span>}
+          {selectedCategory !== null && <span className="text-blue-600 ml-1">(filtered)</span>}
         </div>
       </div>
     </div>
