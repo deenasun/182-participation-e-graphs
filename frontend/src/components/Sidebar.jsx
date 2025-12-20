@@ -253,10 +253,15 @@ const Sidebar = ({ post, onClose, width = 384, onWidthChange }) => {
           
           {/* Impressiveness Score */}
           {post.impressiveness_score !== undefined && (
-            <div className="mb-4">
-              <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+            <div className="mb-4 group relative inline-block">
+              <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium cursor-help">
                 ⭐ Score: {post.impressiveness_score.toFixed(1)}
               </span>
+              {/* Tooltip */}
+              <div className="absolute left-0 top-full mt-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                Impressiveness score based on engagement (reactions, replies), content depth, attachments, and external links.
+                <div className="absolute -top-1 left-4 w-2 h-2 bg-gray-900 transform rotate-45"></div>
+              </div>
             </div>
           )}
           
