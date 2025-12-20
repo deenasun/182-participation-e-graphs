@@ -135,7 +135,7 @@ class PostCategorizer:
             'quiz': ['quiz', 'question generator', 'practice problems', 'practice questions', "exam"],
             'interactive': ['interactive', 'visualization', 'visualizer', 'simulator', 'playground'],
             'diagram': ['diagram', 'mermaid', 'concept map', 'mind map', 'graph'],
-            'notebook': ['notebook', 'colab', 'jupyter'],
+            'notebook': ['ipynb', 'colab', 'jupyter'],
             'chat': ['chat', 'conversation', 'dialogue', 'tutor', 'chatbot'],
             'summary': ['summary', 'summarize', 'notes', 'outline'],
             'video': ['video', 'recording', 'screencast'],
