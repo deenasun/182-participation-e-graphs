@@ -107,6 +107,25 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
     }
   }, [data, viewMode]);
 
+  // Zoom controls
+  const handleZoomIn = useCallback(() => {
+    if (graphRef.current) {
+      graphRef.current.zoom(1.2, 200);
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (graphRef.current) {
+      graphRef.current.zoom(0.8, 200);
+    }
+  }, []);
+
+  const handleZoomToFit = useCallback(() => {
+    if (graphRef.current) {
+      graphRef.current.zoomToFit(400, 50);
+    }
+  }, []);
+
   // Get color for node based on its primary category and highlight state
   const getNodeColor = useCallback((node) => {
     if (highlightedNodes && highlightedNodes.has(node.id)) {
@@ -395,6 +414,85 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
           </div>
           <p>• Click category to highlight</p>
           <p>• Click node for details</p>
+        </div>
+      </div>
+
+      {/* Zoom Controls */}
+      <div className="absolute bottom-28 right-4 flex flex-row gap-0 bg-white rounded-lg shadow-lg border border-gray-200 overflow-visible z-10">
+        <div className="group relative">
+          <button
+            onClick={handleZoomToFit}
+            className="px-2 py-2 hover:bg-gray-50 transition-colors border-r border-gray-200 flex items-center justify-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-gray-700"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+              />
+            </svg>
+          </button>
+          <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+            Reset zoom
+            <div className="absolute top-full right-2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+          </div>
+        </div>
+        <div className="group relative">
+          <button
+            onClick={handleZoomIn}
+            className="px-2 py-2 hover:bg-gray-50 transition-colors border-r border-gray-200 flex items-center justify-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-gray-700"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+          </button>
+          <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+            Zoom in
+            <div className="absolute top-full right-2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+          </div>
+        </div>
+        <div className="group relative">
+          <button
+            onClick={handleZoomOut}
+            className="px-2 py-2 hover:bg-gray-50 transition-colors flex items-center justify-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-gray-700"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20 12H4"
+              />
+            </svg>
+          </button>
+          <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+            Zoom out
+            <div className="absolute top-full right-2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+          </div>
         </div>
       </div>
     </div>
