@@ -71,32 +71,27 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
-  // Filter data based on selected category
-  // When a category is selected, show all nodes that have that category in their topics/tools/llms
-  const filteredData = useMemo(() => {
-    if (selectedCategory === null) return data;
+  // Determine which nodes match the selected category (but keep all nodes visible)
+  const matchingNodeIds = useMemo(() => {
+    if (selectedCategory === null) return new Set();
     
-    // Filter nodes based on whether they contain the selected category in their relevant array
-    let nodes;
-    if (viewMode === 'topic') {
-      nodes = data.nodes.filter(node => 
-        node.topics && node.topics.includes(selectedCategory)
-      );
-    } else if (viewMode === 'tool') {
-      nodes = data.nodes.filter(node => 
-        node.tools && node.tools.includes(selectedCategory)
-      );
-    } else { // llm
-      nodes = data.nodes.filter(node => 
-        node.llms && node.llms.includes(selectedCategory)
-      );
-    }
+    const matchingIds = new Set();
+    data.nodes.forEach(node => {
+      let matches = false;
+      if (viewMode === 'topic') {
+        matches = node.topics && node.topics.includes(selectedCategory);
+      } else if (viewMode === 'tool') {
+        matches = node.tools && node.tools.includes(selectedCategory);
+      } else { // llm
+        matches = node.llms && node.llms.includes(selectedCategory);
+      }
+      
+      if (matches) {
+        matchingIds.add(node.id);
+      }
+    });
     
-    const nodeIds = new Set(nodes.map(n => n.id));
-    // When filtering by category, show edges between filtered nodes
-    const edges = data.edges.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target));
-    
-    return { ...data, nodes, edges };
+    return matchingIds;
   }, [data, selectedCategory, viewMode]);
 
   // Reset filter when view mode changes
@@ -106,13 +101,12 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
 
   // Fit graph to view on data change
   useEffect(() => {
-    if (graphRef.current && filteredData && filteredData.nodes.length > 0) {
-      // Add a small delay to ensure the graph is rendered
+    if (graphRef.current && data && data.nodes.length > 0) {
       setTimeout(() => {
         graphRef.current.zoomToFit(400, 50);
       }, 100);
     }
-  }, [filteredData, viewMode]);
+  }, [data, viewMode]);
 
   // Get color for node based on its primary category and highlight state
   const getNodeColor = useCallback((node) => {
@@ -122,6 +116,9 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
     if (hoveredNode && node.id === hoveredNode.id) {
       return '#FFA500'; // Orange for hover
     }
+    
+    // Check if node matches selected category
+    const isMatching = selectedCategory === null || matchingNodeIds.has(node.id);
     
     // Get the primary category for this node based on view mode
     let primaryCategory = null;
@@ -133,13 +130,18 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
       primaryCategory = node.llms[0];
     }
     
+    // If a category is selected and this node doesn't match, gray it out
+    if (!isMatching) {
+      return '#D3D3D3'; // Light gray for non-matching nodes
+    }
+    
     // Return color for the category, or default gray if no category
     if (primaryCategory && categoryColorMap.has(primaryCategory)) {
       return categoryColorMap.get(primaryCategory);
     }
     
     return '#DFE6E9'; // Light gray for uncategorized
-  }, [highlightedNodes, hoveredNode, viewMode, categoryColorMap]);
+  }, [highlightedNodes, hoveredNode, viewMode, categoryColorMap, selectedCategory, matchingNodeIds]);
 
   // Get node size based on highlight state and impressiveness
   const getNodeSize = useCallback((node) => {
@@ -157,8 +159,14 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
       return baseSize * 1.5; // Slightly larger for hover
     }
     
+    // Make non-matching nodes slightly smaller when a category is selected
+    const isMatching = selectedCategory === null || matchingNodeIds.has(node.id);
+    if (!isMatching) {
+      return baseSize * 0.7; // Smaller for non-matching nodes
+    }
+    
     return baseSize;
-  }, [highlightedNodes, hoveredNode]);
+  }, [highlightedNodes, hoveredNode, selectedCategory, matchingNodeIds]);
 
   // Custom node canvas rendering for better performance
   const paintNode = useCallback((node, ctx, globalScale) => {
@@ -215,16 +223,16 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
   }, []);
 
   // Prepare graph data with proper source/target IDs
-  const prepareGraphData = useCallback(() => {
-    if (!filteredData || !filteredData.nodes || !filteredData.edges) {
+  const graphData = useMemo(() => {
+    if (!data || !data.nodes || !data.edges) {
       return { nodes: [], links: [] };
     }
 
     // Map node IDs for fast lookup
-    const nodeMap = new Map(filteredData.nodes.map(node => [node.id, node]));
+    const nodeMap = new Map(data.nodes.map(node => [node.id, node]));
 
     // Filter edges to only include those where both nodes exist
-    const validLinks = filteredData.edges
+    const validLinks = data.edges
       .filter(edge => nodeMap.has(edge.source) && nodeMap.has(edge.target))
       .map(edge => ({
         source: edge.source,
@@ -233,12 +241,10 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
       }));
 
     return {
-      nodes: filteredData.nodes,
+      nodes: data.nodes,
       links: validLinks
     };
-  }, [filteredData]);
-
-  const graphData = prepareGraphData();
+  }, [data]);
 
   // Extract unique categories from nodes based on view mode
   const categories = useMemo(() => {
@@ -286,16 +292,47 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
           ctx.arc(node.x, node.y, size * 1.5, 0, 2 * Math.PI);
           ctx.fill();
         }}
-        linkColor={() => '#99999933'}
-        linkWidth={0.5}
+        linkColor={(link) => {
+          // Gray out edges that don't connect matching nodes when a category is selected
+          if (selectedCategory !== null) {
+            // Handle both node objects and string IDs
+            const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+            const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+            const sourceMatches = matchingNodeIds.has(sourceId);
+            const targetMatches = matchingNodeIds.has(targetId);
+            if (sourceMatches && targetMatches) {
+              return '#99999966'; // Slightly more visible for edges between matching nodes
+            }
+            return '#99999911'; // Very faint for edges involving non-matching nodes
+          }
+          return '#99999933'; // Default when no filter
+        }}
+        linkWidth={(link) => {
+          // Make edges between matching nodes slightly thicker when a category is selected
+          if (selectedCategory !== null) {
+            // Handle both node objects and string IDs
+            const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+            const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+            const sourceMatches = matchingNodeIds.has(sourceId);
+            const targetMatches = matchingNodeIds.has(targetId);
+            if (sourceMatches && targetMatches) {
+              return 0.8; // Thicker for edges between matching nodes
+            }
+            return 0.3; // Thinner for edges involving non-matching nodes
+          }
+          return 0.5; // Default when no filter
+        }}
         linkDirectionalParticles={0}
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
-        cooldownTime={3000}
-        d3VelocityDecay={0.3}
-        d3AlphaDecay={0.02}
+        cooldownTime={500}
+        d3VelocityDecay={0.9}
+        d3AlphaDecay={0.2}
         enableZoomInteraction={true}
         enablePanInteraction={true}
+        enableNodeDrag={true}
+        warmupTicks={100}
+        cooldownTicks={0}
       />
       
       {/* Legend & Filter */}
@@ -335,7 +372,7 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
             <div className="w-2 h-2 rounded-full bg-[#FF6B6B]"></div>
             <span>Search Results / Highlights</span>
           </div>
-          <p>• Click category to filter</p>
+          <p>• Click category to highlight</p>
           <p>• Click node for details</p>
         </div>
       </div>
@@ -344,8 +381,12 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
       <div className="absolute top-4 right-4 bg-white p-3 rounded-lg shadow-lg text-sm border border-gray-200">
         <div className="font-bold text-gray-800 mb-1 capitalize">{viewMode} View</div>
         <div className="text-gray-600 font-medium">
-          {filteredData.nodes.length} posts
-          {selectedCategory !== null && <span className="text-blue-600 ml-1">(filtered)</span>}
+          {data.nodes.length} posts
+          {selectedCategory !== null && (
+            <span className="text-blue-600 ml-1">
+              ({matchingNodeIds.size} matching)
+            </span>
+          )}
         </div>
       </div>
     </div>
