@@ -22,7 +22,7 @@ class PostCategorizer:
             ],
             'Adam & Advanced Optimizers': [
                 'adam', 'adamw', 'rmsprop', 'adagrad', 'locally linear',
-                'matrix norm', 'induced norm', 'feature'
+                'matrix norm', 'induced norm'
             ],
             'muP & MuON': [
                 'mup', 'maximal update', 'muon', 'parameterization',
@@ -130,8 +130,9 @@ class PostCategorizer:
         
         # Tool type keywords
         self.tool_keywords = {
+            'homework': ['homework', 'hw', 'problem set'],
             'flashcard': ['flashcard', 'flash card', 'anki', 'quizlet'],
-            'quiz': ['quiz', 'test', 'question generator', 'practice problems', 'practice questions'],
+            'quiz': ['quiz', 'question generator', 'practice problems', 'practice questions', "exam"],
             'interactive': ['interactive', 'visualization', 'visualizer', 'simulator', 'playground'],
             'diagram': ['diagram', 'mermaid', 'concept map', 'mind map', 'graph'],
             'notebook': ['notebook', 'colab', 'jupyter'],
