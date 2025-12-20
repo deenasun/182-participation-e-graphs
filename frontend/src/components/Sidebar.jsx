@@ -1,6 +1,50 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
-const Sidebar = ({ post, onClose }) => {
+const Sidebar = ({ post, onClose, width = 384, onWidthChange }) => {
+  const [sidebarWidth, setSidebarWidth] = useState(width);
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef(null);
+
+  // Update local width when prop changes
+  useEffect(() => {
+    setSidebarWidth(width);
+  }, [width]);
+
+  // Handle resize
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e) => {
+      const newWidth = window.innerWidth - e.clientX;
+      // Constrain width between 300px and 80% of window width
+      const minWidth = 300;
+      const maxWidth = window.innerWidth * 0.8;
+      const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+      setSidebarWidth(constrainedWidth);
+      if (onWidthChange) {
+        onWidthChange(constrainedWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, onWidthChange]);
+
+  const handleResizeStart = (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent overlay click from closing sidebar
+    setIsResizing(true);
+  };
+
   if (!post) return null;
 
   // Helper to strip XML/HTML tags from EdStem content
@@ -22,7 +66,24 @@ const Sidebar = ({ post, onClose }) => {
       />
       
       {/* Sidebar */}
-      <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl overflow-y-auto z-50 animate-slide-in">
+      <div 
+        ref={sidebarRef}
+        className="fixed right-0 top-0 h-full bg-white shadow-2xl overflow-y-auto z-50 animate-slide-in"
+        style={{ width: `${sidebarWidth}px` }}
+      >
+        {/* Resize Handle */}
+        <div
+          className="absolute left-0 top-0 h-full w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors z-10"
+          onMouseDown={handleResizeStart}
+          style={{ cursor: 'col-resize' }}
+        >
+          {/* Wider invisible hit area for easier grabbing */}
+          <div 
+            className="absolute left-0 top-0 h-full w-4 -translate-x-1.5 cursor-col-resize"
+            onMouseDown={handleResizeStart}
+          />
+        </div>
+        
         <div className="p-6">
           {/* Close Button */}
           <button

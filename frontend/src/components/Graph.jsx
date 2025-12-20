@@ -58,10 +58,9 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
   // Update dimensions on window resize
   useEffect(() => {
     const updateDimensions = () => {
-      const sidebar = 400; // Account for sidebar when open
       const header = 150; // Account for header/controls
       setDimensions({
-        width: window.innerWidth - sidebar,
+        width: window.innerWidth,
         height: window.innerHeight - header
       });
     };

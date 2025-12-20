@@ -22,6 +22,7 @@ function AppContent() {
   const [selectedPost, setSelectedPost] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedNodes, setHighlightedNodes] = useState(new Set());
+  const [sidebarWidth, setSidebarWidth] = useState(384); // Default width (w-96 = 384px)
 
   // Fetch graph data for current view mode
   const { data: graphData, isLoading, error } = useGraphData(viewMode);
@@ -128,7 +129,12 @@ function AppContent() {
         
         {/* Sidebar */}
         {selectedPost && (
-          <Sidebar post={selectedPost} onClose={handleCloseSidebar} />
+          <Sidebar 
+            post={selectedPost} 
+            onClose={handleCloseSidebar}
+            width={sidebarWidth}
+            onWidthChange={setSidebarWidth}
+          />
         )}
       </div>
 
