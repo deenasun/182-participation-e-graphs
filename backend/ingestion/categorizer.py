@@ -1,37 +1,132 @@
 """
-Post categorization using BERTopic and keyword matching.
+Post categorization using keyword matching aligned with course topics.
 Extracts topics, tool types, and LLMs used from post content.
 """
 
-from bertopic import BERTopic
 import re
 from typing import List, Dict
-from sklearn.feature_extraction.text import CountVectorizer
 
 class PostCategorizer:
     """Extract categories and compute quality scores for posts."""
     
     def __init__(self):
         """Initialize categorizer with keyword dictionaries."""
-        self.bertopic = None
-        self.topics = None
-        self.probs = None
         
-        # Stop words to filter out from topic generation
-        self.stop_words = [
-            'to', 'and', 'the', 'a', 'an', 'is', 'of', 'in', 'for', 'on', 
-            'with', 'as', 'by', 'at', 'it', 'from', 'be', 'was', 'are', 
-            'that', 'this', 'but', 'not', 'or', 'if', 'so', 'up', 'out',
-            'what', 'how', 'why', 'when', 'where', 'which', 'who', 'whom',
-            'this', 'that', 'these', 'those', 'am', 'is', 'are', 'was', 'were',
-            'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does',
-            'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because',
-            'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about',
-            'against', 'between', 'into', 'through', 'during', 'before', 'after',
-            'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off',
-            'over', 'under', 'again', 'further', 'then', 'once', "my", "et", "al", "me", "you", 
-            "ai", "gemini", "claude", "gpt", "openai", "perplexity", "cursor"
-        ]
+        # Course-aligned topic keywords (based on CS 182 schedule)
+        self.course_topics = {
+            # Optimization topics (Weeks 1-4)
+            'SGD & Optimization Basics': [
+                'sgd', 'stochastic gradient descent', 'gradient descent', 
+                'momentum', 'optimization', 'optimizer', 'learning rate',
+                'implicit regularization', 'convergence'
+            ],
+            'Adam & Advanced Optimizers': [
+                'adam', 'adamw', 'rmsprop', 'adagrad', 'locally linear',
+                'matrix norm', 'induced norm', 'feature'
+            ],
+            'muP & MuON': [
+                'mup', 'maximal update', 'muon', 'parameterization',
+                'newton-schulz', 'spectral'
+            ],
+            
+            # CNN topics (Weeks 5-6)
+            'CNN Basics': [
+                'cnn', 'conv', 'convolution', 'convolutional', 'kernel', 
+                'stride', 'padding', 'filter', 'feature map'
+            ],
+            'Pooling & Normalization': [
+                'pooling', 'max pool', 'average pool', 'downsampling',
+                'batch norm', 'layer norm', 'normalization', 'rms norm',
+                'data augmentation', 'augment'
+            ],
+            'ResNets & U-Nets': [
+                'resnet', 'residual', 'skip connection', 'u-net', 'unet',
+                'fully convolutional', 'fcn', 'dropout'
+            ],
+            
+            # GNN topics (Week 7)
+            'Graph Neural Networks': [
+                'gnn', 'graph neural', 'graph network', 'node embedding',
+                'message passing', 'diffpool', 'graph convolution', 'gcn',
+                'adjacency', 'node feature'
+            ],
+            
+            # RNN topics (Weeks 7-8)
+            'RNNs & Sequence Models': [
+                'rnn', 'recurrent', 'lstm', 'gru', 'hidden state',
+                'sequence', 'vanishing gradient', 'exploding gradient',
+                'backprop through time', 'bptt', 'weight sharing'
+            ],
+            
+            # Self-supervision (Week 8)
+            'Self-Supervised Learning': [
+                'self-supervised', 'self supervised', 'contrastive',
+                'autoencoder', 'auto-encoder', 'pretext task', 'pretrain',
+                'masked', 'reconstruction'
+            ],
+            
+            # State-Space Models (Weeks 8-9)
+            'State-Space Models': [
+                'state space', 'state-space', 'ssm', 'mamba', 's4',
+                'hippo', 'selective state'
+            ],
+            
+            # Attention & Transformers (Weeks 9-10)
+            'Attention Mechanisms': [
+                'attention', 'self-attention', 'self attention', 
+                'multi-head', 'multihead', 'cross attention',
+                'query', 'key', 'value', 'qkv'
+            ],
+            'Transformers': [
+                'transformer', 'bert', 'positional encoding', 
+                'position embedding', 'layer norm', 'feed forward',
+                'encoder decoder', 'decoder only'
+            ],
+            
+            # PEFT & Transfer Learning (Weeks 10-12)
+            #'Prompting & In-Context Learning': [
+            #    'prompt', 'prompting', 'in-context', 'in context',
+            #    'few-shot', 'few shot', 'zero-shot', 'zero shot',
+            #    'chain of thought', 'cot'
+            #],
+            'PEFT & Fine-Tuning': [
+                'lora', 'peft', 'fine-tune', 'fine tune', 'finetuning',
+                'soft prompt', 'adapter', 'parameter efficient', 'finetune'
+            ],
+            'Transfer Learning': [
+                'transfer learning', 'pretrained', 'pre-trained',
+                'domain adaptation', 'feature extraction', 'pretrain'
+            ],
+            'Meta-Learning': [
+                'meta-learning', 'meta learning', 'maml', 'few-shot learning',
+                'learn to learn', 'reptile'
+            ],
+            
+            # Generative Models (Weeks 12-14)
+            'Generative Models': [
+                'generative', 'vae', 'variational', 'autoencoder',
+                'diffusion', 'ddpm', 'score matching', 'flow',
+                'normalizing flow', 'gan', 'generative adversarial'
+            ],
+            'Post-Training & RLHF': [
+                'post-training', 'post training', 'rlhf', 'dpo',
+                'reward model', 'preference', 'alignment', 'instruction tuning'
+            ],
+            
+            # General/Foundational
+            'Backpropagation': [
+                'backprop', 'backward pass', 'chain rule', 'gradient',
+                'derivative', 'jacobian', 'computational graph'
+            ],
+            'Neural Network Basics': [
+                'mlp', 'perceptron', 'activation', 'relu', 'sigmoid',
+                'tanh', 'softmax', 'weight', 'bias', 'layer'
+            ],
+            'Loss Functions & Regularization': [
+                'loss', 'cross entropy', 'mse', 'regularization',
+                'l1', 'l2', 'weight decay', 'overfitting', 'underfitting'
+            ],
+        }
         
         # Tool type keywords
         self.tool_keywords = {
@@ -50,7 +145,7 @@ class PostCategorizer:
         # LLM keywords
         self.llm_keywords = {
             'Claude': ['claude', 'anthropic'],
-            'GPT': ['gpt', 'chatgpt', 'openai'],
+            'ChatGPT': ['gpt', 'chatgpt', 'openai'],
             'Gemini': ['gemini', 'google'],
             'NotebookLM': ['notebooklm', 'notebook lm'],
             'Perplexity': ['perplexity'],
@@ -58,79 +153,44 @@ class PostCategorizer:
             'Other': []
         }
     
-    def train_topic_model(self, documents: List[str]):
-        """
-        Train BERTopic model on all posts to extract topics.
-        
-        Args:
-            documents: List of post contents
-        """
-        # Strip HTML tags from documents for better topic modeling
-        cleaned_docs = []
-        for doc in documents:
-            # Remove XML/HTML tags
-            clean = re.sub(r'<[^>]+>', ' ', doc)
-            # Remove extra whitespace
-            clean = re.sub(r'\s+', ' ', clean).strip()
-            cleaned_docs.append(clean)
-        
-        # Use CountVectorizer with stop words to filter out common words
-        vectorizer_model = CountVectorizer(stop_words=self.stop_words)
-        
-        self.bertopic = BERTopic(
-            language="english",
-            calculate_probabilities=True,
-            verbose=False,
-            min_topic_size=3,
-            nr_topics='auto',
-            vectorizer_model=vectorizer_model
-        )
-        
-        try:
-            self.topics, self.probs = self.bertopic.fit_transform(cleaned_docs)
-            print(f"  Identified {len(set(self.topics)) - (1 if -1 in self.topics else 0)} topics")
-        except Exception as e:
-            print(f"  Warning: Topic modeling failed: {e}")
-            print(f"  Using fallback topic extraction")
-            self.topics = [-1] * len(documents)  # All outliers
-    
     def extract_topics(self, content: str, post_idx: int = None) -> List[str]:
         """
-        Extract topic labels for a post using BERTopic.
+        Extract course-aligned topic labels for a post using keyword matching.
         
         Args:
             content: Post content
-            post_idx: Index of post in training data (if available)
+            post_idx: Index of post (unused, kept for backwards compatibility)
             
         Returns:
-            List of topic keywords
+            List of matched course topics
         """
-        if self.bertopic is None or self.topics is None:
-            return []
+        # Clean content - remove HTML tags and normalize
+        clean_content = re.sub(r'<[^>]+>', ' ', content)
+        clean_content = re.sub(r'\s+', ' ', clean_content).strip().lower()
         
-        try:
-            # Get topic for this post
-            if post_idx is not None and post_idx < len(self.topics):
-                topic_id = self.topics[post_idx]
-            else:
-                # Clean content
-                clean = re.sub(r'<[^>]+>', ' ', content)
-                clean = re.sub(r'\s+', ' ', clean).strip()
-                topic_id, _ = self.bertopic.transform([clean])
-                topic_id = topic_id[0]
-            
-            if topic_id == -1:  # Outlier
-                return []
-            
-            # Get representative words for topic
-            topic_words = self.bertopic.get_topic(topic_id)
-            if topic_words:
-                return [word for word, _ in topic_words[:3]]  # Top 3 words
-        except Exception as e:
-            # Silently handle errors - some posts may not fit well
-            pass
+        detected_topics = []
+        topic_scores = {}
         
-        return []
+        for topic, keywords in self.course_topics.items():
+            # Count keyword matches for this topic
+            match_count = 0
+            for keyword in keywords:
+                # Use word boundary matching for short keywords to avoid false positives
+                if len(keyword) <= 3:
+                    pattern = r'\b' + re.escape(keyword) + r'\b'
+                    matches = len(re.findall(pattern, clean_content, re.IGNORECASE))
+                else:
+                    matches = clean_content.count(keyword.lower())
+                match_count += matches
+            
+            if match_count > 0:
+                topic_scores[topic] = match_count
+        
+        # Sort by match count and return top topics (max 3)
+        sorted_topics = sorted(topic_scores.items(), key=lambda x: x[1], reverse=True)
+        detected_topics = [topic for topic, score in sorted_topics[:3]]
+        
+        return detected_topics
     
     def extract_tools(self, content: str) -> List[str]:
         """

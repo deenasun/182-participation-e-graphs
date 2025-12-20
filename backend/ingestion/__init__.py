@@ -106,18 +106,14 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
     
     print(f"Processed {len(processed_posts)} posts (excluding header)")
     
-    print("\nStep 3: Training topic model with BERTopic...")
-    all_content = [p['content'] for p in processed_posts]
-    categorizer.train_topic_model(all_content)
-    
-    print("\nStep 4: Categorizing posts (extracting topics, tools, LLMs)...")
+    print("\nStep 3: Categorizing posts (extracting course-aligned topics, tools, LLMs)...")
     for i, post in enumerate(processed_posts):
-        post['topics'] = categorizer.extract_topics(post['content'], i)
+        post['topics'] = categorizer.extract_topics(post['content'])
         post['tools'] = categorizer.extract_tools(post['content'])
         post['llms'] = categorizer.extract_llms(post['content'])
         post['impressiveness_score'] = categorizer.calculate_impressiveness(post)
     
-    print("\nStep 5: Generating embeddings...")
+    print("\nStep 4: Generating embeddings...")
     for i, post in enumerate(processed_posts):
         if (i + 1) % 20 == 0:
             print(f"  Generated embeddings for {i + 1}/{len(processed_posts)} posts")
@@ -125,7 +121,7 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
         post.update(embeddings)
     print(f"  Generated embeddings for {len(processed_posts)}/{len(processed_posts)} posts")
     
-    print("\nStep 6: Computing graph layouts...")
+    print("\nStep 5: Computing graph layouts...")
     layout_data = {}
     cluster_names_data = {}
     
@@ -182,7 +178,7 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
         
         print(f"    Found {len(similarities)} edges above similarity threshold")
     
-    print("\nStep 7: Saving processed data...")
+    print("\nStep 6: Saving processed data...")
     # output_path is now passed as parameter or set to backend/processed_posts.json
     
     # Convert numpy arrays and int64 to native Python types for JSON serialization
