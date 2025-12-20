@@ -3,9 +3,12 @@ import json
 import time
 import os
 import re
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ED_COURSE_ID = os.environ.get("ED_COURSE_ID")
-ED_API_TOKEN = os.environ.get("ED_API_TOKEN")
+ED_API_TOKEN = os.environ.get("ED_API_KEY")
 SEARCH_STRING = "Special Participation E"        
 OUTPUT_FILE = "ed_posts.json"
 ATTACHMENT_DIR = "attachments"   
@@ -128,6 +131,7 @@ def process_threads(substring):
 
             post_data = {
                 'id': thread.get('id'),
+                'number': thread.get('number'),  # Sequential post number shown in UI
                 'title': title,
                 'author': author_name,
                 'date': thread.get('created_at'),

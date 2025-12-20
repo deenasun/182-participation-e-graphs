@@ -180,24 +180,21 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
     ctx.fillStyle = getNodeColor(node);
     ctx.fill();
     
-    // Draw border for highlighted nodes
-    if (highlightedNodes && highlightedNodes.has(node.id)) {
-      ctx.strokeStyle = '#FF0000';
-      ctx.lineWidth = 2 / globalScale;
-      ctx.stroke();
-    }
+    // Check if highlighted
+    const isHighlighted = highlightedNodes && highlightedNodes.has(node.id);
     
-    // Draw label on hover or highlight
-    if ((hoveredNode && node.id === hoveredNode.id) || 
-        (highlightedNodes && highlightedNodes.has(node.id))) {
+    // Only draw label below node if it's highlighted (search result)
+    // For hover without search, rely on the built-in tooltip
+    if (isHighlighted) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#333';
       
       // Add background for readability
       const textWidth = ctx.measureText(label).width;
       const padding = 4;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      const bgOpacity = 0.95;
+      ctx.fillStyle = `rgba(255, 255, 255, ${bgOpacity})`;
+      
       ctx.fillRect(
         node.x - textWidth / 2 - padding,
         node.y + size + 2,
@@ -209,7 +206,7 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
       ctx.fillStyle = '#333';
       ctx.fillText(label, node.x, node.y + size + fontSize / 2 + 4);
     }
-  }, [getNodeColor, getNodeSize, highlightedNodes, hoveredNode]);
+  }, [getNodeColor, getNodeSize, highlightedNodes]);
 
   // Handle node click
   const handleNodeClick = useCallback((node) => {
@@ -287,9 +284,34 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
         nodePointerAreaPaint={(node, color, ctx) => {
           ctx.fillStyle = color;
           const size = getNodeSize(node);
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, size * 1.5, 0, 2 * Math.PI);
-          ctx.fill();
+          const isHighlighted = highlightedNodes && highlightedNodes.has(node.id);
+          
+          // If node is highlighted (has visible label), expand clickable area to include label
+          if (isHighlighted) {
+            const label = node.title;
+            const fontSize = 12 / 1; // Approximate scale
+            ctx.font = `${fontSize}px Sans-Serif`;
+            const textWidth = ctx.measureText(label).width;
+            const padding = 4;
+            
+            // Draw clickable area for the node circle
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, size * 1.5, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw clickable area for the label
+            ctx.fillRect(
+              node.x - textWidth / 2 - padding,
+              node.y + size + 2,
+              textWidth + padding * 2,
+              fontSize + padding
+            );
+          } else {
+            // Default clickable area (just the node circle)
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, size * 1.5, 0, 2 * Math.PI);
+            ctx.fill();
+          }
         }}
         linkColor={(link) => {
           // Gray out edges that don't connect matching nodes when a category is selected
@@ -335,7 +357,7 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
       />
       
       {/* Legend & Filter */}
-      <div className="absolute bottom-4 left-4 bg-white p-4 rounded-lg shadow-lg text-sm max-h-[70vh] overflow-y-auto w-64 border border-gray-200">
+      <div className="absolute top-4 left-4 bg-white p-4 rounded-lg shadow-lg text-sm max-h-[70vh] overflow-y-auto w-64 border border-gray-200">
         <div className="flex justify-between items-center mb-3">
           <h4 className="font-bold text-gray-800 capitalize">Categories ({viewMode})</h4>
           {selectedCategory !== null && (
@@ -373,19 +395,6 @@ const Graph = ({ data, viewMode, highlightedNodes, onNodeClick }) => {
           </div>
           <p>• Click category to highlight</p>
           <p>• Click node for details</p>
-        </div>
-      </div>
-      
-      {/* Stats overlay */}
-      <div className="absolute top-4 right-4 bg-white p-3 rounded-lg shadow-lg text-sm border border-gray-200">
-        <div className="font-bold text-gray-800 mb-1 capitalize">{viewMode} View</div>
-        <div className="text-gray-600 font-medium">
-          {data.nodes.length} posts
-          {selectedCategory !== null && (
-            <span className="text-blue-600 ml-1">
-              ({matchingNodeIds.size} matching)
-            </span>
-          )}
         </div>
       </div>
     </div>

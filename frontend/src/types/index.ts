@@ -3,6 +3,7 @@
 export interface Post {
   id: number;
   ed_post_id: number;
+  ed_post_number?: number;  // Sequential post number shown in UI
   title: string;
   content: string;
   author: string;

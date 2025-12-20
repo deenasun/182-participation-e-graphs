@@ -47,14 +47,147 @@ const Sidebar = ({ post, onClose, width = 384, onWidthChange }) => {
 
   if (!post) return null;
 
-  // Helper to strip XML/HTML tags from EdStem content
-  const cleanContent = (content) => {
+  // Helper to render formatted content (markdown-like formatting)
+  const renderFormattedContent = (content) => {
     if (!content) return "";
-    // Replace tags with space, then clean up extra whitespace
-    return content
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    
+    // Split by newlines to preserve paragraph structure
+    const lines = content.split('\n');
+    
+    return lines.map((line, lineIdx) => {
+      // Skip empty lines (but preserve them for spacing)
+      if (line.trim() === '') {
+        return <br key={lineIdx} />;
+      }
+      
+      // Check if line starts with bullet point
+      const isBullet = line.trim().startsWith('•');
+      const lineContent = isBullet ? line.trim().substring(1).trim() : line;
+      
+      // Process markdown-style formatting
+      const parts = [];
+      let remaining = lineContent;
+      let key = 0;
+      
+      // Process links [text](url)
+      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+      let lastIndex = 0;
+      let match;
+      
+      while ((match = linkRegex.exec(remaining)) !== null) {
+        // Add text before the link
+        if (match.index > lastIndex) {
+          const beforeText = remaining.substring(lastIndex, match.index);
+          parts.push(...formatText(beforeText, key));
+          key += beforeText.length;
+        }
+        
+        // Add the link
+        parts.push(
+          <a
+            key={`link-${key}`}
+            href={match[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 hover:underline"
+          >
+            {match[1]}
+          </a>
+        );
+        key += match[0].length;
+        lastIndex = match.index + match[0].length;
+      }
+      
+      // Add remaining text after last link
+      if (lastIndex < remaining.length) {
+        const afterText = remaining.substring(lastIndex);
+        parts.push(...formatText(afterText, key));
+      }
+      
+      // If no links found, format the whole line
+      if (parts.length === 0) {
+        parts.push(...formatText(lineContent, 0));
+      }
+      
+      return (
+        <p key={lineIdx} className={`mb-2 last:mb-0 ${isBullet ? 'ml-4' : ''}`}>
+          {isBullet && <span className="mr-2">•</span>}
+          {parts}
+        </p>
+      );
+    });
+  };
+  
+  // Helper to format text with bold, italic, underline
+  const formatText = (text, startKey) => {
+    const parts = [];
+    let remaining = text;
+    let key = startKey;
+    
+    // Process bold **text** first (to avoid conflicts with italic)
+    const boldRegex = /\*\*([^*]+?)\*\*/g;
+    // Process underline __text__
+    const underlineRegex = /__([^_]+?)__/g;
+    // Process italic *text* (but not **text** - we'll handle this by processing bold first)
+    const italicRegex = /(?<!\*)\*([^*]+?)\*(?!\*)/g;
+    
+    // Collect all matches with their positions
+    const matches = [];
+    
+    let match;
+    while ((match = boldRegex.exec(remaining)) !== null) {
+      matches.push({ type: 'bold', start: match.index, end: match.index + match[0].length, content: match[1] });
+    }
+    while ((match = italicRegex.exec(remaining)) !== null) {
+      matches.push({ type: 'italic', start: match.index, end: match.index + match[0].length, content: match[1] });
+    }
+    while ((match = underlineRegex.exec(remaining)) !== null) {
+      matches.push({ type: 'underline', start: match.index, end: match.index + match[0].length, content: match[1] });
+    }
+    
+    // Sort matches by position
+    matches.sort((a, b) => a.start - b.start);
+    
+    // Remove overlapping matches (keep first)
+    const nonOverlapping = [];
+    for (const m of matches) {
+      if (nonOverlapping.length === 0 || m.start >= nonOverlapping[nonOverlapping.length - 1].end) {
+        nonOverlapping.push(m);
+      }
+    }
+    
+    // Build parts
+    let lastIndex = 0;
+    for (const m of nonOverlapping) {
+      // Add text before match
+      if (m.start > lastIndex) {
+        parts.push(remaining.substring(lastIndex, m.start));
+      }
+      
+      // Add formatted content
+      const content = m.content;
+      if (m.type === 'bold') {
+        parts.push(<strong key={`${key}-${m.start}`}>{content}</strong>);
+      } else if (m.type === 'italic') {
+        parts.push(<em key={`${key}-${m.start}`}>{content}</em>);
+      } else if (m.type === 'underline') {
+        parts.push(<u key={`${key}-${m.start}`}>{content}</u>);
+      }
+      
+      lastIndex = m.end;
+    }
+    
+    // Add remaining text
+    if (lastIndex < remaining.length) {
+      parts.push(remaining.substring(lastIndex));
+    }
+    
+    // If no matches, return the text as-is
+    if (parts.length === 0) {
+      return [text];
+    }
+    
+    return parts;
   };
 
   return (
@@ -68,23 +201,23 @@ const Sidebar = ({ post, onClose, width = 384, onWidthChange }) => {
       {/* Sidebar */}
       <div 
         ref={sidebarRef}
-        className="fixed right-0 top-0 h-full bg-white shadow-2xl overflow-y-auto z-50 animate-slide-in"
+        className="fixed right-0 top-0 h-full bg-white shadow-2xl z-50 animate-slide-in flex"
         style={{ width: `${sidebarWidth}px` }}
       >
         {/* Resize Handle */}
         <div
-          className="absolute left-0 top-0 h-full w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors z-10"
+          className="absolute left-0 top-0 bottom-0 w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors z-10"
           onMouseDown={handleResizeStart}
           style={{ cursor: 'col-resize' }}
         >
           {/* Wider invisible hit area for easier grabbing */}
           <div 
-            className="absolute left-0 top-0 h-full w-4 -translate-x-1.5 cursor-col-resize"
+            className="absolute left-0 top-0 bottom-0 w-4 -translate-x-1.5 cursor-col-resize"
             onMouseDown={handleResizeStart}
           />
         </div>
         
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-6">
           {/* Close Button */}
           <button
             onClick={onClose}
@@ -95,6 +228,18 @@ const Sidebar = ({ post, onClose, width = 384, onWidthChange }) => {
           
           {/* Post Title */}
           <h2 className="text-2xl font-bold mb-2 pr-8 text-gray-800">{post.title}</h2>
+          
+          {/* Post Number */}
+          {(post.ed_post_number || post.ed_post_id) && (
+            <div className="text-sm text-gray-500 mb-2">
+              <span className="font-medium">
+                Post #{post.ed_post_number || post.ed_post_id}
+                {post.ed_post_number && post.ed_post_id && post.ed_post_number !== post.ed_post_id && (
+                  <span className="text-gray-400 ml-2">(ID: {post.ed_post_id})</span>
+                )}
+              </span>
+            </div>
+          )}
           
           {/* Author and Date */}
           <div className="text-sm text-gray-600 mb-4">
@@ -140,8 +285,8 @@ const Sidebar = ({ post, onClose, width = 384, onWidthChange }) => {
           {/* Content */}
           <div className="mb-6">
             <h3 className="font-semibold mb-2 text-gray-700">Content</h3>
-            <div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
-              {cleanContent(post.content)}
+            <div className="text-sm text-gray-700 bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
+              {renderFormattedContent(post.content)}
             </div>
           </div>
           

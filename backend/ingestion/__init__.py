@@ -17,6 +17,107 @@ __all__ = [
     'run_ingestion_pipeline'
 ]
 
+def convert_xml_to_formatted_text(xml_content: str) -> str:
+    """
+    Convert EdStem XML content to formatted text while preserving structure.
+    
+    Handles:
+    - <paragraph> tags -> newlines
+    - <bold> tags -> **bold** (markdown style)
+    - <italic> tags -> *italic* (markdown style)
+    - <underline> tags -> __underline__ (markdown style)
+    - <list> and <list-item> -> bullet points
+    - <link> tags -> preserve URLs
+    - <break/> -> line breaks
+    - <file> tags -> remove (attachments handled separately)
+    - Other tags -> remove but preserve content
+    """
+    if not xml_content:
+        return ""
+    
+    import re
+    
+    # Remove document wrapper tags
+    text = xml_content.replace('<document version="2.0">', '').replace('</document>', '')
+    
+    # Handle file tags (remove them, attachments are handled separately)
+    text = re.sub(r'<file[^>]*/>', '', text)
+    
+    # Handle break tags -> line break
+    text = text.replace('<break/>', '\n')
+    text = text.replace('<break />', '\n')
+    
+    # Handle paragraph tags -> newline (but preserve content)
+    # Replace closing paragraph tags with newline first
+    text = text.replace('</paragraph>', '\n')
+    # Then remove opening paragraph tags
+    text = re.sub(r'<paragraph[^>]*>', '', text)
+    
+    # Handle list items -> bullet points
+    text = text.replace('</list-item>', '\n')
+    text = re.sub(r'<list-item[^>]*>', '• ', text)
+    
+    # Handle list tags (remove, but preserve structure)
+    text = text.replace('</list>', '\n')
+    text = re.sub(r'<list[^>]*>', '', text)
+    
+    # Handle blockquote tags -> indented block
+    text = text.replace('</blockquote>', '\n')
+    text = re.sub(r'<blockquote[^>]*>', '\n> ', text)
+    
+    # Handle heading tags -> bold headers
+    text = re.sub(r'</heading[^>]*>', '\n\n', text)
+    text = re.sub(r'<heading[^>]*level="(\d+)"[^>]*>', lambda m: '\n' + '#' * int(m.group(1)) + ' ', text)
+    text = re.sub(r'<heading[^>]*>', '\n## ', text)
+    
+    # Handle link tags -> extract URL and text
+    def replace_link(match):
+        href_match = re.search(r'href="([^"]+)"', match.group(0))
+        url = href_match.group(1) if href_match else ''
+        # Get text content between tags
+        content_match = re.search(r'>([^<]+)</link>', match.group(0))
+        link_text = content_match.group(1) if content_match else url
+        return f'[{link_text}]({url})' if url else link_text
+    
+    text = re.sub(r'<link[^>]*>.*?</link>', replace_link, text, flags=re.DOTALL)
+    
+    # Handle formatting tags (bold, italic, underline)
+    text = text.replace('</bold>', '**')
+    text = re.sub(r'<bold[^>]*>', '**', text)
+    
+    text = text.replace('</italic>', '*')
+    text = re.sub(r'<italic[^>]*>', '*', text)
+    
+    text = text.replace('</underline>', '__')
+    text = re.sub(r'<underline[^>]*>', '__', text)
+    
+    # Remove any remaining XML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Decode XML entities
+    text = text.replace('&amp;', '&')
+    text = text.replace('&lt;', '<')
+    text = text.replace('&gt;', '>')
+    text = text.replace('&quot;', '"')
+    text = text.replace('&apos;', "'")
+    
+    # Normalize whitespace: collapse multiple spaces but preserve newlines
+    # Replace multiple spaces with single space (but not newlines)
+    lines = text.split('\n')
+    normalized_lines = []
+    for line in lines:
+        # Collapse multiple spaces within a line
+        line = re.sub(r'[ \t]+', ' ', line)
+        # Remove trailing spaces
+        line = line.rstrip()
+        normalized_lines.append(line)
+    
+    # Join lines back, removing empty lines at the end
+    text = '\n'.join(normalized_lines)
+    text = text.rstrip()
+    
+    return text
+
 def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
     """
     Main ingestion pipeline - load JSON, process, generate embeddings, compute layouts.
@@ -26,7 +127,6 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
         output_path: Path to save processed_posts.json. If None, uses backend directory.
     """
     import json
-    import os
     import numpy as np
     from pathlib import Path
     
@@ -59,20 +159,18 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
         if 'Extra Credit Opportunity' in raw_post.get('title', ''):
             continue
             
-        # Clean content and title from XML/HTML tags
+        # Convert XML content to formatted text while preserving structure
         import re
         content = raw_post.get('content', '')
-        # Remove XML tags and normalize whitespace
-        content = re.sub(r'<[^>]+>', ' ', content)
-        content = re.sub(r'\s+', ' ', content).strip()
+        content = convert_xml_to_formatted_text(content)
         
         title = raw_post.get('title', '')
-        title = re.sub(r'<[^>]+>', ' ', title)
-        title = re.sub(r'\s+', ' ', title).strip()
+        title = convert_xml_to_formatted_text(title)
             
         # Extract basic metadata
         post_data = {
             'ed_post_id': raw_post['id'],
+            'ed_post_number': raw_post.get('number'),  # Sequential post number shown in UI
             'title': title,
             'content': content,
             'author': raw_post['author'],
@@ -86,13 +184,12 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
             'num_replies': 0
         }
         
-        # Extract URLs from content using basic regex
-        import re
-        content = raw_post['content']
-        github = re.search(r'github\.com/[\w-]+(?:/[\w-]+)?', content)
+        # Extract URLs from content using basic regex (use raw content for URL extraction)
+        raw_content = raw_post['content']
+        github = re.search(r'github\.com/[\w-]+(?:/[\w-]+)?', raw_content)
         # Look for website URLs (excluding github, linkedin, edstem)
-        website = re.search(r'https?://(?!github\.com|linkedin\.com|edstem\.org)[\w.-]+\.[\w]+(?:/[\w.-]*)*', content)
-        linkedin = re.search(r'linkedin\.com/in/[\w-]+', content)
+        website = re.search(r'https?://(?!github\.com|linkedin\.com|edstem\.org)[\w.-]+\.[\w]+(?:/[\w.-]*)*', raw_content)
+        linkedin = re.search(r'linkedin\.com/in/[\w-]+', raw_content)
         
         post_data['github_url'] = github.group(0) if github else None
         post_data['website_url'] = website.group(0) if website else None
@@ -222,11 +319,11 @@ def run_ingestion_pipeline(json_path: str = None, output_path: str = None):
     tool_counts = Counter(all_tools)
     llm_counts = Counter(all_llms)
     
-    print(f"\nTool distribution:")
+    print("\nTool distribution:")
     for tool, count in tool_counts.most_common(5):
         print(f"  {tool}: {count}")
     
-    print(f"\nLLM distribution:")
+    print("\nLLM distribution:")
     for llm, count in llm_counts.most_common():
         print(f"  {llm}: {count}")
     

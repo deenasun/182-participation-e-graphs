@@ -11,6 +11,7 @@ class PostBase(BaseModel):
     """Base post model with common fields"""
     id: int
     ed_post_id: int
+    ed_post_number: Optional[int] = None  # Sequential post number shown in UI
     title: str
     content: str
     author: str

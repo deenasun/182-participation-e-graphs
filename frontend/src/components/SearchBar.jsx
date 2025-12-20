@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const SearchBar = ({ onSearch, placeholder = "Search posts by keyword or topic..." }) => {
+const SearchBar = ({ onSearch, placeholder = "Search by keyword, post number (e.g., 123), or date (e.g., 12-17-2025)..." }) => {
   const [query, setQuery] = useState('');
 
   const handleSubmit = (e) => {
@@ -34,7 +34,7 @@ const SearchBar = ({ onSearch, placeholder = "Search posts by keyword or topic..
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            className="absolute right-16 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
           >
             ✕
           </button>

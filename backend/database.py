@@ -39,6 +39,7 @@ class SupabaseClient:
         # Prepare post row
         post_row = {
             'ed_post_id': post_data['ed_post_id'],
+            'ed_post_number': post_data.get('ed_post_number'),  # Sequential post number shown in UI
             'title': post_data['title'],
             'content': post_data['content'],
             'author': post_data['author'],
@@ -245,17 +246,55 @@ class SupabaseClient:
         limit: int = 20
     ) -> List[Dict]:
         """
-        Hybrid search: keyword + semantic
+        Hybrid search: keyword + semantic + post number + date
         
         Args:
-            query: Search query string
+            query: Search query string (can be keyword, post number, or date in MM-DD-YYYY format)
             view_mode: View mode for semantic search ('content', 'topic', 'tool', or 'llm')
             limit: Maximum number of results
             
         Returns:
             List of matching posts
         """
-        # Keyword search using PostgreSQL text search
+        import re
+        from datetime import datetime
+        
+        query = query.strip()
+        results = []
+        
+        # Check if query is a pure number (post number search)
+        if query.isdigit():
+            post_number = int(query)
+            post_results = self.client.table('posts').select('*').eq('ed_post_number', post_number).limit(limit).execute()
+            return post_results.data
+        
+        # Check if query matches MM-DD-YYYY date pattern
+        date_match = re.match(r'^(\d{2})-(\d{2})-(\d{4})$', query)
+        if date_match:
+            month, day, year = date_match.groups()
+            # Convert MM-DD-YYYY to YYYY-MM-DD for database comparison
+            try:
+                # Validate the date
+                date_obj = datetime(int(year), int(month), int(day))
+                # Format as YYYY-MM-DD to match database format
+                search_date = date_obj.strftime('%Y-%m-%d')
+                
+                # Get all posts and filter by date in Python (since TIMESTAMP casting is problematic)
+                all_posts = self.client.table('posts').select('*').execute()
+                date_results = []
+                for post in all_posts.data:
+                    # Extract date part from timestamp (format: YYYY-MM-DDTHH:MM:SS or similar)
+                    post_date = post.get('date', '')
+                    if post_date.startswith(search_date):
+                        date_results.append(post)
+                        if len(date_results) >= limit:
+                            break
+                return date_results
+            except (ValueError, Exception) as e:
+                print(f"Invalid date format: {e}")
+                return []
+        
+        # Default: Keyword search using PostgreSQL text search
         keyword_results = self.client.table('posts').select('*').or_(
             f'title.ilike.%{query}%,content.ilike.%{query}%,author.ilike.%{query}%'
         ).limit(limit).execute()
@@ -312,3 +351,4 @@ class SupabaseClient:
             'layouts': layouts_count,
             'similarities': similarities_count
         }
+
